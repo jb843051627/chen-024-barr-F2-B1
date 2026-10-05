@@ -1,0 +1,126 @@
+<!DOCTYPE html>
+<html lang="en" xmlns:th="http://www.thymeleaf.org">
+<head>
+    <th:block th:include="include :: header('改造进度卡立卡')"/>
+</head>
+<body>
+<form class="layui-form">
+    <input type="hidden" name="source" th:value="${form != null && form.source != null ? form.source : 0}">
+    <div class="mainBox">
+        <div class="layui-form-item">
+            <label class="layui-form-label">立卡来路</label>
+            <div class="layui-input-block" style="padding-top:9px;">
+                <span class="layui-badge" th:classappend="${form != null && form.source == '1'} ? 'layui-bg-orange' : 'layui-bg-blue'"
+                      th:text="${form != null && form.source == '1'} ? '从当月验收带出立卡' : '一处一张亲手立'"></span>
+                <span class="layui-word-aux">两条入口同一张表、同一套数法</span>
+            </div>
+        </div>
+        <div class="layui-form-item">
+            <label class="layui-form-label">挂靠底册</label>
+            <div class="layui-input-block">
+                <select name="archId" lay-verify="required" lay-search="" lay-filter="arch">
+                    <option value="">请选在册底册（停用底册立不了卡）</option>
+                    <option th:each="a : ${archList}"
+                            th:value="${a.id}"
+                            th:text="${a.archNo} + '｜' + ${a.archName} + '｜' + ${a.roadName}"></option>
+                </select>
+            </div>
+        </div>
+        <div class="layui-form-item">
+            <label class="layui-form-label">点位/住户代号</label>
+            <div class="layui-input-block">
+                <input type="text" name="siteNo" required lay-verify="required" autocomplete="off"
+                       th:value="${form != null ? form.siteNo : ''}" placeholder="同点位同时只容一张在走卡" class="layui-input">
+            </div>
+        </div>
+        <div class="layui-form-item">
+            <label class="layui-form-label">应改处数</label>
+            <div class="layui-input-inline">
+                <input type="text" name="needNum" id="needNum" required lay-verify="required" autocomplete="off"
+                       placeholder="整数，空着/零头/负数不收" class="layui-input">
+            </div>
+            <label class="layui-form-label" style="width:90px;">已改处数</label>
+            <div class="layui-input-inline" style="width:120px;">
+                <input type="text" name="doneNum" id="doneNum" autocomplete="off" value="0"
+                       placeholder="空着按 0" class="layui-input">
+            </div>
+        </div>
+        <div class="layui-form-item">
+            <label class="layui-form-label">还差几处</label>
+            <div class="layui-input-inline" style="width:120px;">
+                <!-- 谁都不填：轧出来只回显 -->
+                <input type="text" id="lackNum" readonly class="layui-input layui-disabled" value="0">
+            </div>
+            <div class="layui-form-mid layui-word-aux">应改−已改，系统轧；立卡/已改改口/换街都会重轧</div>
+        </div>
+        <div class="layui-form-item">
+            <label class="layui-form-label">卡代号</label>
+            <div class="layui-input-block" style="padding-top:9px;">
+                <span class="layui-word-aux">由系统按季排号，本子上自带的号一概不认（此格不摆录入框）；谁立的随登录身份自动落</span>
+            </div>
+        </div>
+        <div class="layui-form-item">
+            <label class="layui-form-label">改造要件</label>
+            <div class="layui-input-block">
+                <textarea name="content" placeholder="随卡交来的改造要件" class="layui-textarea"></textarea>
+            </div>
+        </div>
+        <div class="layui-form-item">
+            <label class="layui-form-label">备注</label>
+            <div class="layui-input-block">
+                <input type="text" name="remark" autocomplete="off" class="layui-input">
+            </div>
+        </div>
+    </div>
+    <div class="bottom">
+        <div class="button-container">
+            <button type="submit" class="layui-btn layui-btn-normal layui-btn-sm" lay-submit lay-filter="card-save">
+                <i class="layui-icon layui-icon-ok"></i> 立卡
+            </button>
+            <button type="reset" class="layui-btn layui-btn-primary layui-btn-sm">
+                <i class="layui-icon layui-icon-refresh"></i> 重置
+            </button>
+        </div>
+    </div>
+</form>
+<th:block th:include="include :: footer"/>
+<script th:inline="javascript">
+    layui.use(['form', 'jquery'], function () {
+        let form = layui.form;
+        let $ = layui.jquery;
+        let MODULE_PATH = rootPath + "/BarrSiteCardController";
+
+        function recalc() {
+            let need = parseInt($('#needNum').val(), 10);
+            let done = parseInt($('#doneNum').val(), 10);
+            if (isNaN(need) || isNaN(done) || done > need) {
+                $('#lackNum').val(isNaN(need) ? '0' : (need - (isNaN(done) ? 0 : done)));
+                return;
+            }
+            $('#lackNum').val(need - done);
+        }
+        $('#needNum,#doneNum').on('input', recalc);
+
+        form.on('submit(card-save)', function (data) {
+            $.ajax({
+                url: MODULE_PATH + '/add',
+                data: data.field,
+                dataType: 'json',
+                type: 'post',
+                success: function (result) {
+                    if (result.code == 200) {
+                        layer.msg(result.msg, {icon: 1, time: 1400}, function () {
+                            parent.layer.close(parent.layer.getFrameIndex(window.name));
+                            parent.layui.table.reload("card-table");
+                        });
+                    } else {
+                        layer.msg(result.msg, {icon: 2, time: 3200});
+                    }
+                }
+            });
+            return false;
+        });
+    });
+</script>
+</body>
+</html>

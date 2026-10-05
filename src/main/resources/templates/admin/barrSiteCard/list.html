@@ -1,0 +1,293 @@
+<!DOCTYPE html>
+<html lang="en" xmlns:th="http://www.thymeleaf.org" xmlns:sec="http://www.pollix.at/thymeleaf/shiro">
+<head>
+    <th:block th:include="include :: header('改造进度卡')"/>
+</head>
+<body class="pear-container">
+<div class="layui-card">
+    <div class="layui-card-body">
+        <form class="layui-form" id="card-query-form">
+            <div class="layui-form-item">
+                <label class="layui-form-label">卡代号</label>
+                <div class="layui-input-inline">
+                    <input type="text" name="cardNo" placeholder="整段或开头几笔" class="layui-input">
+                </div>
+                <label class="layui-form-label">点位代号</label>
+                <div class="layui-input-inline">
+                    <input type="text" name="siteNo" placeholder="整段或开头几笔" class="layui-input">
+                </div>
+                <label class="layui-form-label">底册类别</label>
+                <div class="layui-input-inline">
+                    <select name="archKind">
+                        <option value="">全部类别</option>
+                        <option value="小区楼组">小区楼组</option>
+                        <option value="村组院落">村组院落</option>
+                        <option value="公共点位">公共点位</option>
+                    </select>
+                </div>
+            </div>
+            <div class="layui-form-item">
+                <label class="layui-form-label">进展</label>
+                <div class="layui-input-inline">
+                    <select name="status">
+                        <option value="">全部</option>
+                        <option value="0">新录</option>
+                        <option value="1">已改齐</option>
+                        <option value="2">缺项</option>
+                        <option value="-1">在走（未收口）</option>
+                        <option value="-2">已收口</option>
+                        <option value="-3">已撤</option>
+                    </select>
+                </div>
+                <button class="pear-btn pear-btn-md pear-btn-primary" lay-submit lay-filter="card-query">
+                    <i class="layui-icon layui-icon-search"></i> 查询
+                </button>
+                <button type="reset" class="pear-btn pear-btn-md">
+                    <i class="layui-icon layui-icon-refresh"></i> 重置
+                </button>
+                <span class="layui-badge layui-bg-gray" th:text="'本季：' + ${season}"></span>
+                <span th:if="${streetRole}" class="layui-badge layui-bg-blue">街道岗：只见本街</span>
+                <span th:if="${deptRole}" class="layui-badge layui-bg-orange">部岗：只看划给的街</span>
+            </div>
+        </form>
+    </div>
+</div>
+
+<div class="layui-card">
+    <div class="layui-card-body">
+        <!-- 三份摆法：同一次 /summary 计算，三份户数与总数接得平；本街空着就是 0，不借邻街 -->
+        <table class="layui-table" style="margin:0;">
+            <thead>
+            <tr>
+                <th>摆法</th><th>各档户数</th><th>合计户数</th>
+            </tr>
+            </thead>
+            <tbody>
+            <tr>
+                <td>按街道</td>
+                <td id="sum-by-street" style="line-height:28px;"></td>
+                <td id="sum-total-street" class="layui-badge layui-bg-green"></td>
+            </tr>
+            <tr>
+                <td>按底册类别</td>
+                <td id="sum-by-kind" style="line-height:28px;"></td>
+                <td id="sum-total-kind" class="layui-badge layui-bg-green"></td>
+            </tr>
+            <tr>
+                <td>按进展情形</td>
+                <td id="sum-by-status" style="line-height:28px;"></td>
+                <td id="sum-total-status" class="layui-badge layui-bg-green"></td>
+            </tr>
+            </tbody>
+        </table>
+    </div>
+</div>
+
+<div class="layui-card">
+    <div class="layui-card-body">
+        <table id="card-table" lay-filter="card-table"></table>
+    </div>
+</div>
+</body>
+
+<script type="text/html" id="card-toolbar">
+    <button shiro:hasPermission="barr:barrSiteCard:add" class="pear-btn pear-btn-primary pear-btn-md" lay-event="add">
+        <i class="layui-icon layui-icon-add-1"></i> 一处一张亲手立
+    </button>
+    <button shiro:hasPermission="barr:barrSiteCard:add" class="pear-btn pear-btn-warming pear-btn-md" lay-event="addFromAccept">
+        <i class="layui-icon layui-icon-list"></i> 从当月验收带出立卡
+    </button>
+</script>
+
+<script type="text/html" id="card-bar">
+    <button shiro:hasPermission="barr:barrSiteCard:edit" class="pear-btn pear-btn-primary pear-btn-sm" lay-event="edit" title="改口编辑"><i class="layui-icon layui-icon-edit"></i></button>
+    <button shiro:hasPermission="barr:barrSiteCard:advance" class="pear-btn pear-btn-normal pear-btn-sm" lay-event="advance" title="走完一级" {{d.closed==1||d.stage>=1?'disabled':''}}><i class="layui-icon layui-icon-right"></i></button>
+    <button shiro:hasPermission="barr:barrSiteCard:revert" class="pear-btn pear-btn-warming pear-btn-sm" lay-event="revert" title="退回一步重来" {{d.closed==1||d.stage==0?'disabled':''}}><i class="layui-icon layui-icon-return"></i></button>
+    <button shiro:hasPermission="barr:barrSiteCard:close" class="pear-btn pear-btn-success pear-btn-sm" lay-event="close" title="收口到头" {{d.closed==1||d.stage==0?'disabled':''}}><i class="layui-icon layui-icon-ok"></i></button>
+    <button shiro:hasPermission="barr:barrSiteCard:remove" class="pear-btn pear-btn-danger pear-btn-sm" lay-event="remove" title="撤卡" {{d.closed==1?'disabled':''}}><i class="layui-icon layui-icon-delete"></i></button>
+    <button class="pear-btn pear-btn-sm" lay-event="logs" title="流转留痕"><i class="layui-icon layui-icon-time"></i></button>
+</script>
+
+<script type="text/html" id="status-tpl">
+    {{# if(d.closed==1){ }}
+    <span class="layui-badge layui-bg-black">已收口</span>
+    {{# } else if(d.status==1){ }}
+    <span class="layui-badge layui-bg-green">已改齐</span>
+    {{# } else if(d.status==2){ }}
+    <span class="layui-badge">缺项</span>
+    {{# } else { }}
+    <span class="layui-badge layui-bg-blue">新录</span>
+    {{# } }}
+</script>
+
+<script type="text/html" id="source-tpl">
+    {{# if(d.source==1){ }}<span class="layui-badge layui-bg-orange">验收带出</span>{{# } else { }}亲手立{{# } }}
+</script>
+
+<th:block th:include="include :: footer"/>
+<script>
+    layui.use(['table', 'form', 'jquery'], function () {
+        let table = layui.table;
+        let form = layui.form;
+        let $ = layui.jquery;
+        let MODULE_PATH = rootPath + "/BarrSiteCardController/";
+
+        let cols = [[
+            {title: 'ID', field: 'id', hide: true},
+            {title: '卡代号', field: 'cardNo', width: 170},
+            {title: '点位/住户代号', field: 'siteNo', width: 140},
+            {title: '底册代号', field: 'archNo', width: 90},
+            {title: '底册全称', field: 'archName', minWidth: 220},
+            {title: '类别', field: 'archKind', width: 100},
+            {title: '所在街', field: 'streetName', width: 110},
+            {title: '应改', field: 'needNum', width: 70, align: 'center'},
+            {title: '已改', field: 'doneNum', width: 70, align: 'center'},
+            {title: '还差', field: 'lackNum', width: 70, align: 'center'},
+            {title: '来路', field: 'source', width: 100, templet: '#source-tpl'},
+            {title: '进展', field: 'status', width: 100, templet: '#status-tpl'},
+            {title: '谁立的', field: 'createBy', width: 100},
+            {title: '操作', toolbar: '#card-bar', width: 230, align: 'center', fixed: 'right'}
+        ]];
+
+        table.render({
+            elem: '#card-table',
+            url: MODULE_PATH + 'list',
+            page: true,
+            method: 'get',
+            limit: 10,
+            limits: [10, 20, 50],
+            cols: cols,
+            skin: 'line',
+            toolbar: '#card-toolbar',
+            defaultToolbar: [{layEvent: 'refresh', icon: 'layui-icon-refresh'}, 'filter', 'print', 'exports'],
+            where: {orderByColumn: "create_time", isAsc: "desc"},
+            done: function () {
+                loadSummary();
+            }
+        });
+
+        function queryField() {
+            return $('#card-query-form').serializeArray().reduce(function (o, kv) {
+                o[kv.name] = $.trim(kv.value);
+                return o;
+            }, {});
+        }
+
+        function loadSummary() {
+            $.get(MODULE_PATH + 'summary', queryField(), function (res) {
+                if (res.code !== 200) {
+                    return;
+                }
+                let d = res.data;
+                $('#sum-by-street').html(groups(d.byStreet));
+                $('#sum-by-kind').html(groups(d.byArchKind));
+                $('#sum-by-status').html(groups(d.byStatus));
+                $('#sum-total-street,#sum-total-kind,#sum-total-status').text(d.total + ' 户');
+            });
+        }
+
+        function groups(arr) {
+            if (!arr || arr.length === 0) {
+                return '<span class="layui-badge layui-bg-gray">空</span>';
+            }
+            return arr.map(function (g) {
+                return '<span class="layui-badge layui-bg-blue" style="margin-right:8px;">' + g.name + '：' + g.count + ' 户</span>';
+            }).join('');
+        }
+
+        form.on('submit(card-query)', function () {
+            table.reload('card-table', {where: queryField(), page: {curr: 1}});
+            return false;
+        });
+
+        table.on('toolbar(card-table)', function (obj) {
+            if (obj.event === 'add') {
+                openAdd('一处一张亲手立', 0);
+            } else if (obj.event === 'addFromAccept') {
+                openAdd('从当月验收带出立卡', 1);
+            } else if (obj.event === 'refresh') {
+                table.reload('card-table');
+            }
+        });
+
+        function openAdd(title, source) {
+            layer.open({
+                type: 2, title: title, shade: 0.1, area: ['620px', '560px'],
+                content: MODULE_PATH + 'add?source=' + source
+            });
+        }
+
+        function postAction(url, data, confirmText, done) {
+            layer.confirm(confirmText, {icon: 3, title: '提示'}, function (idx) {
+                layer.close(idx);
+                let loading = layer.load();
+                $.post(url, data, function (res) {
+                    layer.close(loading);
+                    if (res.code === 200) {
+                        layer.msg(res.msg, {icon: 1, time: 1200}, done);
+                    } else {
+                        layer.msg(res.msg, {icon: 2, time: 2600});
+                    }
+                }, 'json');
+            });
+        }
+
+        table.on('tool(card-table)', function (obj) {
+            let d = obj.data;
+            if (obj.event === 'edit') {
+                if (d.closed == 1) {
+                    layer.msg('已收口到头，字改不动，非动不可只能另起新卡', {icon: 2});
+                    return;
+                }
+                layer.open({
+                    type: 2, title: '改口编辑（卡代号 ' + d.cardNo + '）', shade: 0.1, area: ['620px', '600px'],
+                    content: MODULE_PATH + 'edit/' + d.id
+                });
+            } else if (obj.event === 'advance') {
+                askNote('走完一级', function (note) {
+                    postAction(MODULE_PATH + 'advance', {id: d.id, note: note}, '确认走完「已改齐」这一级？', reloadAll);
+                });
+            } else if (obj.event === 'revert') {
+                askNote('退回一步重来', function (note) {
+                    postAction(MODULE_PATH + 'revert', {id: d.id, note: note}, '退回后上回那笔依旧留底，确认？', reloadAll);
+                });
+            } else if (obj.event === 'close') {
+                askNote('收口到头', function (note) {
+                    postAction(MODULE_PATH + 'close', {id: d.id, note: note}, '收口后加不进、改不动、撤不下，确认？', reloadAll);
+                });
+            } else if (obj.event === 'remove') {
+                postAction(MODULE_PATH + 'remove?ids=' + d.id, {}, '确认撤下这张在走卡？', reloadAll);
+            } else if (obj.event === 'logs') {
+                let loading = layer.load();
+                $.get(MODULE_PATH + 'logs/' + d.id, function (res) {
+                    layer.close(loading);
+                    let rows = (res.data || []).map(function (l) {
+                        return '<tr><td>' + (l.createTime || '') + '</td><td>' + actionName(l.action)
+                            + '</td><td>' + (l.stepNote || '') + '</td><td>' + (l.operator || '') + '</td></tr>';
+                    }).join('');
+                    layer.open({
+                        type: 1, title: '流转留痕·' + d.cardNo + '（旧笔留底，不与后补并排）', area: ['720px', '480px'],
+                        content: '<table class="layui-table"><thead><tr><th>时间</th><th>动作</th><th>这一笔</th><th>经办人</th></tr></thead><tbody>'
+                            + (rows || '<tr><td colspan="4">暂无</td></tr>') + '</tbody></table>'
+                    });
+                });
+            }
+        });
+
+        function askNote(title, cb) {
+            layer.prompt({title: title + '·这一步落下的一笔（可空）', formType: 2, area: ['380px', '120px']}, function (val, idx) {
+                layer.close(idx);
+                cb(val);
+            });
+        }
+
+        function actionName(a) {
+            return {create: '立卡', advance: '推进', revert: '回退', close: '收口', edit: '改口'}[a] || a;
+        }
+
+        function reloadAll() {
+            table.reload('card-table');
+        }
+    });
+</script>
+</html>

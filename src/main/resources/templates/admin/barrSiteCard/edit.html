@@ -1,0 +1,142 @@
+<!DOCTYPE html>
+<html lang="en" xmlns:th="http://www.thymeleaf.org">
+<head>
+    <th:block th:include="include :: header('改造进度卡改口')"/>
+</head>
+<body>
+<th:block th:if="${notFound}">
+    <div class="layui-card"><div class="layui-card-body">这张卡找不着，或已经撤下。</div></div>
+</th:block>
+<th:block th:unless="${notFound}">
+<form class="layui-form" th:object="${card}">
+    <input type="hidden" name="id" th:value="*{id}">
+    <div class="mainBox">
+        <div class="layui-form-item" th:if="*{closed == 1}">
+            <div class="layui-input-block">
+                <span class="layui-badge layui-bg-black">此卡已收口到头：加不进、字改不动、撤不下，非动不可只能另起新卡。</span>
+            </div>
+        </div>
+        <div class="layui-form-item">
+            <label class="layui-form-label">卡代号</label>
+            <div class="layui-input-inline" style="width:180px;">
+                <input type="text" class="layui-input layui-disabled" th:value="*{cardNo}" readonly>
+            </div>
+            <label class="layui-form-label" style="width:90px;">谁立的</label>
+            <div class="layui-input-inline" style="width:130px;">
+                <input type="text" class="layui-input layui-disabled" th:value="*{createBy}" readonly>
+            </div>
+        </div>
+        <div class="layui-form-item">
+            <label class="layui-form-label">当前进展</label>
+            <div class="layui-input-block" style="padding-top:9px;">
+                <span th:if="*{closed == 1}" class="layui-badge layui-bg-black">已收口到头</span>
+                <span th:unless="*{closed == 1}" class="layui-badge layui-bg-blue"
+                      th:text="*{stage == 0} ? '新录（一级未走）' : (*{status == 1} ? '已改齐' : (*{status == 2} ? '缺项' : '在走'))"></span>
+                <span class="layui-word-aux">档由系统按已走完的级数与处数自行数出，屏上填的、经办人记的都不算数</span>
+            </div>
+        </div>
+        <div class="layui-form-item">
+            <label class="layui-form-label">挂靠底册</label>
+            <div class="layui-input-block">
+                <select name="archId" lay-filter="arch">
+                    <option th:each="a : ${archList}"
+                            th:value="${a.id}"
+                            th:selected="${a.id == card.archId}"
+                            th:disabled="${a.status == 1}"
+                            th:text="${a.archNo} + '｜' + ${a.archName} + (${a.status == 1} ? '（已停用，不可新挂）' : '')"></option>
+                </select>
+                <div class="layui-word-aux">底册全称以底册本人为准；随卡写法不一致时改卡不改底。换挂靠街时差口重轧。</div>
+            </div>
+        </div>
+        <div class="layui-form-item">
+            <label class="layui-form-label">点位/住户代号</label>
+            <div class="layui-input-block">
+                <input type="text" name="siteNo" th:value="*{siteNo}" autocomplete="off"
+                       placeholder="同点位已有第二张在走卡时并不过去" class="layui-input">
+            </div>
+        </div>
+        <div class="layui-form-item">
+            <label class="layui-form-label">应改处数</label>
+            <div class="layui-input-inline">
+                <input type="text" name="needNum" id="needNum" th:value="*{needNum}" autocomplete="off" class="layui-input">
+            </div>
+            <label class="layui-form-label" style="width:90px;">已改处数</label>
+            <div class="layui-input-inline" style="width:120px;">
+                <input type="text" name="doneNum" id="doneNum" th:value="*{doneNum}" autocomplete="off" class="layui-input">
+            </div>
+        </div>
+        <div class="layui-form-item">
+            <label class="layui-form-label">还差几处</label>
+            <div class="layui-input-inline" style="width:120px;">
+                <input type="text" id="lackNum" class="layui-input layui-disabled" th:value="*{lackNum}" readonly>
+            </div>
+            <div class="layui-form-mid layui-word-aux">新轧的数盖旧数，此格只回显</div>
+        </div>
+        <div class="layui-form-item">
+            <label class="layui-form-label">改造要件</label>
+            <div class="layui-input-block">
+                <textarea name="content" class="layui-textarea" th:text="*{content}"></textarea>
+            </div>
+        </div>
+        <div class="layui-form-item">
+            <label class="layui-form-label">备注</label>
+            <div class="layui-input-block">
+                <input type="text" name="remark" th:value="*{remark}" autocomplete="off" class="layui-input">
+            </div>
+        </div>
+    </div>
+    <div class="bottom">
+        <div class="button-container">
+            <button type="submit" class="layui-btn layui-btn-normal layui-btn-sm" lay-submit lay-filter="card-save">
+                <i class="layui-icon layui-icon-ok"></i> 保存改口
+            </button>
+        </div>
+    </div>
+</form>
+<th:block th:include="include :: footer"/>
+<script th:inline="javascript">
+    layui.use(['form', 'jquery'], function () {
+        let form = layui.form;
+        let $ = layui.jquery;
+        let MODULE_PATH = rootPath + "/BarrSiteCardController";
+        let closed = [[${card.closed}]];
+
+        function recalc() {
+            let need = parseInt($('#needNum').val(), 10);
+            let done = parseInt($('#doneNum').val(), 10);
+            if (isNaN(need)) {
+                $('#lackNum').val(0);
+                return;
+            }
+            $('#lackNum').val(need - (isNaN(done) ? 0 : done));
+        }
+        $('#needNum,#doneNum').on('input', recalc);
+
+        if (closed == 1) {
+            $('form input,form select,form textarea,form button').prop('disabled', true).addClass('layui-disabled');
+        }
+
+        form.on('submit(card-save)', function (data) {
+            $.ajax({
+                url: MODULE_PATH + '/edit',
+                data: data.field,
+                dataType: 'json',
+                type: 'post',
+                success: function (result) {
+                    if (result.code == 200) {
+                        layer.msg(result.msg, {icon: 1, time: 1400}, function () {
+                            parent.layer.close(parent.layer.getFrameIndex(window.name));
+                            parent.layui.table.reload("card-table");
+                        });
+                    } else {
+                        layer.msg(result.msg, {icon: 2, time: 3200});
+                    }
+                }
+            });
+            return false;
+        });
+    });
+</script>
+</th:block>
+</body>
+</html>
